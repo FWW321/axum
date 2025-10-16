@@ -1,6 +1,5 @@
 use axum::debug_handler;
 use axum::Router;
-use axum::extract::State;
 use axum::routing::{post, get, put, delete};
 use sea_orm::prelude::*;
 use sea_orm::Condition;
@@ -15,7 +14,6 @@ use validator::ValidationError;
 use super::ApiResponse;
 use super::extract::{ValidJson, Path};
 use crate::app::AppState;
-use crate::error::ApiResult;
 use crate::entity::user;
 use crate::entity::prelude::*;
 use crate::middleware::get_auth_layer;
@@ -29,6 +27,7 @@ pub fn build_router() -> Router<AppState> {
     let router = Router::new()
         .route("/", get(list))
         .route("/{id}", put(update))
+        .route("/{id}", delete(del))
         .route_layer(get_auth_layer())
         .route("/", post(create));
 
@@ -179,4 +178,22 @@ pub async fn list(query: ValidQuery<ListQuery>) -> Page<user::Model> {
     let items = paginator.fetch_page(pagination.page - 1).await?;
     
     Ok(ApiResponse::ok("User list fetched successfully".to_owned(), Some(Page::from_params(&pagination, total, items))))
+}
+
+#[handler]
+#[debug_handler]
+async fn del(Path(id): Path<Uuid>) {
+    let user = User::find_by_id(id)
+        .one(&db)
+        .await?;
+
+    if user.is_none() {
+        return Err(ApiError::NotFound);
+    }
+
+    User::delete_by_id(id)
+        .exec(&db)
+        .await?;
+
+    Ok(ApiResponse::ok("User deleted successfully".to_owned(), None))
 }

@@ -1,17 +1,28 @@
-use std::net::SocketAddr;
-
-use axum::{debug_handler, extract::{ConnectInfo, State}, routing::{get, post}, Extension};
-use axum::Router;
-use macros::handler;
+use axum::{
+    debug_handler,
+    extract::Extension,
+    routing::{get, post},
+    Router,
+};
+use sea_orm::{prelude::*, Condition};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use sea_orm::{prelude::*, Condition};
+use macros::handler;
 
-use crate::{app::AppState, error::{ApiError, ApiResult}, middleware::get_auth_layer, router::{extract::ValidJson, ApiResponse}};
-use crate::entity::user;
-use crate::entity::prelude::*;
-use crate::util;
-use crate::middleware::auth::{Principal, get_jwt};
+use crate::{
+    app::AppState,
+    entity::{prelude::*, user},
+    error::ApiError,
+    middleware::{
+        auth::{get_jwt, Principal},
+        get_auth_layer,
+    },
+    router::{
+        extract::ValidJson,
+        ApiResponse,
+    },
+    util,
+};
 
 
 pub fn build_router() -> Router<AppState> {
@@ -36,10 +47,10 @@ struct LoginResult {
     access_token: String,
 }
 
-#[handler]
+#[handler(connect_info = true)]
 #[debug_handler]
 #[tracing::instrument(skip_all, fields(account = %idata.0.account, ip = %addr.ip()))]
-async fn login(ConnectInfo(addr): ConnectInfo<SocketAddr>, idata: ValidJson<LoginInData>) -> LoginResult {
+async fn login(idata: ValidJson<LoginInData>) -> LoginResult {
     let LoginInData { account, password } = idata.0;
     tracing::info!("logging in...");
     let user = User::find()
