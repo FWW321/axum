@@ -1,0 +1,28 @@
+[package]
+name = "axum-learn"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+macros = { path = "../macros" }
+bon = "3.8"
+xid = "1.1"
+anyhow = "1.0"
+mimalloc = "0.1"
+# argon2 0.5不兼容rand 0.9
+rand = "0.8"
+argon2 = "0.5"
+num_cpus = "1.17"
+thiserror = "2.0"
+chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = { version = "10.0", features = ["rust_crypto"] }
+axum-valid = { version = "0.24", features = ["full_validator"] }
+validator = { version = "0.20", features = ["derive"] }
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing ={ version = "0.1", features = ["async-await"] }
+tracing-subscriber = { version = "0.3", features = ["chrono", "env-filter"] }
+config ={ version = "0.15", features = ["toml"] }
+serde = { version = "1.0", features = ["derive"] }
+tower-http = { version = "0.6", features = ["trace", "timeout", "limit", "cors", "normalize-path", "auth"] }
+sea-orm = { version = "1.1", features = ["with-chrono", "debug-print", "sqlx-postgres", "runtime-tokio"] }

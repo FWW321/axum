@@ -1,0 +1,9 @@
+[server]
+port = 3000
+
+[db]
+user = "postgres"
+database = "learn"
+
+[log]
+level = "debug"

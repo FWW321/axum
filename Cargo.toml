@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "axum-learn",
+    "macros",
+]
+resolver = "2"
