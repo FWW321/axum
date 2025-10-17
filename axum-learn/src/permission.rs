@@ -3,7 +3,7 @@ use bitflags::bitflags;
 bitflags! {
     pub struct Permission: i32 {
         // 超级管理员标志位（最高位）
-        const ROOT       = 0b10000000_00000000_00000000_00000000; // 1 << 31
+        const ROOT       = -2147483648; // 1 << 31
 
         // 资源 (7位: 24-30)
         // const RES_POST   = 0b00000001_00000000_00000000_00000000; // 1 << 24
