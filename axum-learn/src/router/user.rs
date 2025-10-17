@@ -1,26 +1,24 @@
-use axum::debug_handler;
 use axum::Router;
-use axum::routing::{post, get, put, delete};
-use sea_orm::prelude::*;
+use axum::debug_handler;
+use axum::routing::{delete, get, post, put};
 use sea_orm::Condition;
 use sea_orm::QueryOrder;
 use sea_orm::QueryTrait;
+use sea_orm::prelude::*;
+use sea_orm::{ActiveModelTrait, ActiveValue};
 use serde::Deserialize;
-use chrono::NaiveDate;
 use validator::Validate;
-use sea_orm::{ActiveValue, ActiveModelTrait};
-use validator::ValidationError;
 
 use super::ApiResponse;
-use super::extract::{ValidJson, Path};
+use super::extract::{Path, ValidJson};
 use crate::app::AppState;
-use crate::entity::user;
 use crate::entity::prelude::*;
+use crate::entity::user;
+use crate::error::ApiError;
 use crate::middleware::get_auth_layer;
 use crate::router::extract::ValidQuery;
 use crate::router::{Page, PaginationParams};
 use crate::util;
-use crate::error::ApiError;
 use macros::handler;
 
 pub fn build_router() -> Router<AppState> {
@@ -36,7 +34,11 @@ pub fn build_router() -> Router<AppState> {
 
 #[derive(Debug, Clone, Deserialize, Validate)]
 struct CreateInData {
-    #[validate(length(min = 3, max = 30, message = "username must be between 3 and 30 characters"))]
+    #[validate(length(
+        min = 3,
+        max = 30,
+        message = "username must be between 3 and 30 characters"
+    ))]
     pub name: String,
     #[validate(email(message = "invalid email address"))]
     pub email: String,
@@ -54,31 +56,39 @@ struct CreateInData {
 #[handler]
 #[debug_handler]
 async fn create(idata: ValidJson<CreateInData>) {
-    let CreateInData { name, email, mut password } = idata.0;
+    let CreateInData {
+        name,
+        email,
+        mut password,
+    } = idata.0;
     password = util::hash_password(&password)?;
     let active_model = user::ActiveModel {
         id: ActiveValue::NotSet,
         username: ActiveValue::Set(name),
         email: ActiveValue::Set(email),
         password: ActiveValue::Set(password),
-        birthday: ActiveValue::Set(None),
         created_at: ActiveValue::NotSet,
         updated_at: ActiveValue::NotSet,
+        permission: ActiveValue::Set(0),
     };
     active_model.insert(&db).await?;
-    Ok(ApiResponse::ok("User created successfully".to_owned(), None))
+    Ok(ApiResponse::ok(
+        "User created successfully".to_owned(),
+        None,
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 struct UpdateInData {
-    #[validate(length(min = 3, max = 30, message = "username must be between 3 and 30 characters"))]
+    #[validate(length(
+        min = 3,
+        max = 30,
+        message = "username must be between 3 and 30 characters"
+    ))]
     name: Option<String>,
     #[validate(email(message = "invalid email address"))]
     email: Option<String>,
-    // 直接使用 NaiveDate 类型，Serde 会自动处理 "YYYY-MM-DD" 格式的字符串
-    #[validate(custom(function = "validate_birthday"))]
-    birthday: Option<NaiveDate>,
     // #[serde(flatten)]
     #[validate(nested)]
     password: Option<UpdateInPassword>,
@@ -95,36 +105,41 @@ struct UpdateInPassword {
 #[handler]
 #[debug_handler]
 async fn update(Path(id): Path<Uuid>, idata: ValidJson<UpdateInData>) {
-    let UpdateInData { name, email, birthday, password } = idata.0;
+    let UpdateInData {
+        name,
+        email,
+        password,
+    } = idata.0;
     // 查找现有用户
     let user = user::Entity::find_by_id(id)
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound)?;
-    
-    // 检查是否尝试更改已设置的生日
-    if birthday.is_some() && user.birthday.is_some() {
-        return Err(ApiError::BadRequest("Birthday cannot be changed once set".to_string()));
-    }
-    
+
     // 转换为ActiveModel以便更新
     let mut user_model: user::ActiveModel = user.into();
-    
+
     // 处理密码更新逻辑（如果提供了新密码）
     if let Some(UpdateInPassword { current, new }) = password {
         if current == new {
-            return Err(ApiError::BadRequest("New password must be different from current password".to_string()));
+            return Err(ApiError::BadRequest(
+                "New password must be different from current password".to_string(),
+            ));
         }
         // 验证当前密码是否正确
         match util::verify_password(&current, &user_model.password.try_as_ref().unwrap()) {
-            Ok(_) => {}, // 密码正确，继续
-            Err(_) => return Err(ApiError::BadRequest("Current password is incorrect".to_string())),
+            Ok(_) => {} // 密码正确，继续
+            Err(_) => {
+                return Err(ApiError::BadRequest(
+                    "Current password is incorrect".to_string(),
+                ));
+            }
         }
 
         let hashed_password = util::hash_password(&new)?;
         user_model.password = ActiveValue::Set(hashed_password);
     }
-    
+
     // 处理普通信息更新逻辑
     if let Some(name) = name {
         user_model.username = ActiveValue::Set(name);
@@ -133,24 +148,14 @@ async fn update(Path(id): Path<Uuid>, idata: ValidJson<UpdateInData>) {
     if let Some(email) = email {
         user_model.email = ActiveValue::Set(email);
     }
-    
-    if let Some(birthday_date) = birthday {
-        user_model.birthday = ActiveValue::Set(Some(birthday_date));
-    }
-    
+
     // 执行更新
     user_model.update(&db).await?;
 
-    Ok(ApiResponse::ok("User updated successfully".to_owned(), None))
-}
-
-fn validate_birthday(birthday: &NaiveDate) -> Result<(), ValidationError> {
-    // 验证日期合理性（不能是未来日期）
-        let today = chrono::Local::now().naive_local().date();
-        if birthday > &today {
-            return Err(ValidationError::new("birthday cannot be in the future"));
-        }
-    Ok(())
+    Ok(ApiResponse::ok(
+        "User updated successfully".to_owned(),
+        None,
+    ))
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -164,36 +169,42 @@ pub struct ListQuery {
 #[handler]
 #[debug_handler]
 pub async fn list(query: ValidQuery<ListQuery>) -> Page<user::Model> {
-    let ListQuery { keyword, pagination } = query.0;
-    let paginator = User::find().apply_if(keyword.as_ref(), |query, keyword| {
-        query.filter(
-            Condition::any()
-                .add(user::Column::Username.contains(keyword))
-                .add(user::Column::Email.contains(keyword))
-        )
-    })
-    .order_by_desc(user::Column::CreatedAt)
-    .paginate(&db, pagination.size);
+    let ListQuery {
+        keyword,
+        pagination,
+    } = query.0;
+    let paginator = User::find()
+        .apply_if(keyword.as_ref(), |query, keyword| {
+            query.filter(
+                Condition::any()
+                    .add(user::Column::Username.contains(keyword))
+                    .add(user::Column::Email.contains(keyword)),
+            )
+        })
+        .order_by_desc(user::Column::CreatedAt)
+        .paginate(&db, pagination.size);
     let total = paginator.num_items().await?;
     let items = paginator.fetch_page(pagination.page - 1).await?;
-    
-    Ok(ApiResponse::ok("User list fetched successfully".to_owned(), Some(Page::from_params(&pagination, total, items))))
+
+    Ok(ApiResponse::ok(
+        "User list fetched successfully".to_owned(),
+        Some(Page::from_params(&pagination, total, items)),
+    ))
 }
 
 #[handler]
 #[debug_handler]
 async fn del(Path(id): Path<Uuid>) {
-    let user = User::find_by_id(id)
-        .one(&db)
-        .await?;
+    let user = User::find_by_id(id).one(&db).await?;
 
     if user.is_none() {
         return Err(ApiError::NotFound);
     }
 
-    User::delete_by_id(id)
-        .exec(&db)
-        .await?;
+    User::delete_by_id(id).exec(&db).await?;
 
-    Ok(ApiResponse::ok("User deleted successfully".to_owned(), None))
+    Ok(ApiResponse::ok(
+        "User deleted successfully".to_owned(),
+        None,
+    ))
 }

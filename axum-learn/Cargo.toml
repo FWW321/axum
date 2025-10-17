@@ -12,6 +12,7 @@ mimalloc = "0.1"
 # argon2 0.5不兼容rand 0.9
 rand = "0.8"
 argon2 = "0.5"
+bitflags = "2.9"
 num_cpus = "1.17"
 thiserror = "2.0"
 chrono = { version = "0.4", features = ["serde"] }

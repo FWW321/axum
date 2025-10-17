@@ -5,6 +5,7 @@ mod entity;
 mod error;
 mod log;
 mod middleware;
+mod permission;
 mod router;
 mod server;
 mod util;

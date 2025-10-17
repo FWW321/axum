@@ -3,17 +3,18 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use axum::body::Body;
-use axum::http::{header, Request, Response};
+use axum::http::{Request, Response, header};
+use jsonwebtoken::errors::Result as JwtResult;
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode, get_current_timestamp,
+};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use tower_http::auth::{AsyncAuthorizeRequest, AsyncRequireAuthorizationLayer};
-use jsonwebtoken::errors::Result as JWTResult;
-use jsonwebtoken::{encode, decode, get_current_timestamp, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 
 use crate::error::ApiError;
 
-
-static JWT: LazyLock<JWT> = LazyLock::new(|| JWT::new());
+static JWT: LazyLock<Jwt> = LazyLock::new(|| Jwt::new());
 
 #[derive(Debug, Clone)]
 pub struct Principal {
@@ -31,7 +32,7 @@ pub struct Claims {
     exp: u64,
 }
 
-pub struct JWT {
+pub struct Jwt {
     encoding_secret: EncodingKey,
     decoding_secret: DecodingKey,
     header: Header,
@@ -41,7 +42,7 @@ pub struct JWT {
     issuer: String,
 }
 
-impl JWT {
+impl Jwt {
     pub fn new() -> Self {
         let config = crate::config::get().jwt();
         let encoding_secret = EncodingKey::from_secret(config.secret().as_bytes());
@@ -62,7 +63,7 @@ impl JWT {
         }
     }
 
-    pub fn encode(&self, principal: Principal) -> JWTResult<String> {
+    pub fn encode(&self, principal: Principal) -> JwtResult<String> {
         let current_timestamp = get_current_timestamp();
         let claims = Claims {
             jti: xid::new().to_string(),
@@ -75,61 +76,77 @@ impl JWT {
         encode(&self.header, &claims, &self.encoding_secret)
     }
 
-    pub fn decode(&self, token: &str) -> JWTResult<Principal> {
+    pub fn decode(&self, token: &str) -> JwtResult<Principal> {
         let claims: Claims = decode(token, &self.decoding_secret, &self.validation)?.claims;
         let mut parts = claims.sub.splitn(2, ':');
         let principal = Principal {
-            id: parts.next().unwrap().parse().map_err(|_| jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken))?,
+            id: parts.next().unwrap().parse().map_err(|_| {
+                jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken)
+            })?,
             name: parts.next().unwrap().to_string(),
         };
         Ok(principal)
     }
 }
 
-pub fn get_jwt() -> &'static JWT {
+pub fn get_jwt() -> &'static Jwt {
     &JWT
 }
 
 #[derive(Clone)]
-pub struct JWTAuth {
-    jwt: &'static JWT,
+pub struct JwtAuth {
+    jwt: &'static Jwt,
 }
 
-impl JWTAuth {
-    pub fn new(jwt: &'static JWT) -> Self {
+impl JwtAuth {
+    pub fn new(jwt: &'static Jwt) -> Self {
         Self { jwt }
     }
 }
 
-impl AsyncAuthorizeRequest<Body> for JWTAuth {
+impl AsyncAuthorizeRequest<Body> for JwtAuth {
     type RequestBody = Body;
     type ResponseBody = Body;
-    type Future = Pin<Box<dyn Future<Output = Result<Request<Self::RequestBody>, Response<Self::ResponseBody>>> + Send>>;
+    type Future = Pin<
+        Box<
+            dyn Future<Output = Result<Request<Self::RequestBody>, Response<Self::ResponseBody>>>
+                + Send,
+        >,
+    >;
 
     fn authorize(&mut self, mut req: Request<Self::RequestBody>) -> Self::Future {
         let jwt = self.jwt;
         Box::pin(async move {
             tracing::info!("authorizing request: {}", req.uri().path());
-            let token = req.headers()
+            let token = req
+                .headers()
                 .get(header::AUTHORIZATION)
                 .map(|value| -> Result<_, ApiError> {
-                    let token = value.to_str()
-                        .map_err(|_| ApiError::Unauthorized(format!("Invalid authorization header")))?
+                    let token = value
+                        .to_str()
+                        .map_err(|_| {
+                            ApiError::Unauthorized(format!("Invalid authorization header"))
+                        })?
                         .strip_prefix("Bearer ")
-                        .ok_or_else(|| ApiError::Unauthorized("Authorization header must be Bearer <token>".to_string()))?;
+                        .ok_or_else(|| {
+                            ApiError::Unauthorized(
+                                "Authorization header must be Bearer <token>".to_string(),
+                            )
+                        })?;
                     Ok(token)
                 })
                 .transpose()?
-                .ok_or_else(|| ApiError::Unauthorized("Authorization header is required".to_string()))?;
+                .ok_or_else(|| {
+                    ApiError::Unauthorized("Authorization header is required".to_string())
+                })?;
 
-            let principal = jwt.decode(token)
-                .map_err(|err| ApiError::from(err))?;
+            let principal = jwt.decode(token).map_err(|err| ApiError::from(err))?;
             req.extensions_mut().insert(principal);
             Ok(req)
         })
     }
 }
 
-pub fn get_auth_layer() -> AsyncRequireAuthorizationLayer<JWTAuth> {
-        AsyncRequireAuthorizationLayer::new(JWTAuth::new(get_jwt()))
+pub fn get_auth_layer() -> AsyncRequireAuthorizationLayer<JwtAuth> {
+    AsyncRequireAuthorizationLayer::new(JwtAuth::new(get_jwt()))
 }

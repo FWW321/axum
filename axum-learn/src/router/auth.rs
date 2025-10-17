@@ -1,29 +1,24 @@
 use axum::{
-    debug_handler,
+    Router, debug_handler,
     extract::Extension,
     routing::{get, post},
-    Router,
 };
-use sea_orm::{prelude::*, Condition};
+use macros::handler;
+use sea_orm::{Condition, prelude::*};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
-use macros::handler;
 
 use crate::{
     app::AppState,
     entity::{prelude::*, user},
     error::ApiError,
     middleware::{
-        auth::{get_jwt, Principal},
+        auth::{Principal, get_jwt},
         get_auth_layer,
     },
-    router::{
-        extract::ValidJson,
-        ApiResponse,
-    },
+    router::{ApiResponse, extract::ValidJson},
     util,
 };
-
 
 pub fn build_router() -> Router<AppState> {
     let router = Router::new()
@@ -36,9 +31,17 @@ pub fn build_router() -> Router<AppState> {
 
 #[derive(Debug, Deserialize, Validate)]
 struct LoginInData {
-    #[validate(length(min = 3, max = 30, message = "account must be between 3 and 30 characters"))]
+    #[validate(length(
+        min = 3,
+        max = 30,
+        message = "account must be between 3 and 30 characters"
+    ))]
     account: String,
-    #[validate(length(min = 6, max = 100, message = "password must be between 6 and 100 characters"))]
+    #[validate(length(
+        min = 6,
+        max = 100,
+        message = "password must be between 6 and 100 characters"
+    ))]
     password: String,
 }
 
@@ -57,7 +60,7 @@ async fn login(idata: ValidJson<LoginInData>) -> LoginResult {
         .filter(
             Condition::any()
                 .add(user::Column::Username.eq(&account))
-                .add(user::Column::Email.eq(&account))
+                .add(user::Column::Email.eq(&account)),
         )
         .one(&db)
         .await?
@@ -66,7 +69,7 @@ async fn login(idata: ValidJson<LoginInData>) -> LoginResult {
         .ok_or_else(|| ApiError::Biz("invalid account or password".to_owned()))?;
 
     match util::verify_password(&password, &user.password) {
-        Ok(_) => {},
+        Ok(_) => {}
         _ => return Err(ApiError::Biz("invalid account or password".to_owned())),
     }
 
@@ -74,7 +77,10 @@ async fn login(idata: ValidJson<LoginInData>) -> LoginResult {
         id: user.id,
         name: user.username,
     })?;
-    Ok(ApiResponse::ok("Login successful".to_owned(), Some(LoginResult { access_token })))
+    Ok(ApiResponse::ok(
+        "Login successful".to_owned(),
+        Some(LoginResult { access_token }),
+    ))
 }
 
 #[handler]
@@ -84,5 +90,8 @@ async fn info(Extension(principal): Extension<Principal>) -> user::Model {
         .one(&db)
         .await?
         .ok_or_else(|| ApiError::NotFound)?;
-    Ok(ApiResponse::ok("User info retrieved successfully".to_owned(), Some(user)))
+    Ok(ApiResponse::ok(
+        "User info retrieved successfully".to_owned(),
+        Some(user),
+    ))
 }

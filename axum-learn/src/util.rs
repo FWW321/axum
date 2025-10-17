@@ -1,9 +1,9 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
+use argon2::{Argon2, PasswordHash, password_hash::SaltString};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer};
-use argon2::{password_hash::SaltString, Argon2, PasswordHash};
 
 #[derive(Deserialize)]
 #[serde(untagged)]

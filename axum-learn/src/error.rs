@@ -19,13 +19,13 @@ pub enum ApiError {
     #[error("Path error: {0}")]
     Path(#[from] PathRejection),
     #[error("Body error: {0}")]
-    JSON(#[from] JsonRejection),
+    Json(#[from] JsonRejection),
     #[error("Invalid request parameters: {0}")]
     Validation(String),
     #[error("Bad request: {0}")]
     BadRequest(String),
     #[error("Unauthorized: {0}")]
-    JWT(#[from] jsonwebtoken::errors::Error),
+    Jwt(#[from] jsonwebtoken::errors::Error),
     #[error("Method not allowed")]
     MethodNotAllowed,
     #[error("Unauthorized: {0}")]
@@ -42,16 +42,16 @@ impl ApiError {
         match self {
             ApiError::Biz(_) => StatusCode::OK,
             ApiError::NotFound => StatusCode::NOT_FOUND,
-            ApiError::Query(_) |
-            ApiError::Validation(_) |
-            ApiError::Path(_) |
-            ApiError::JSON(_) |
-            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            ApiError::Unauthorized(_) |
-            ApiError::JWT(_) => StatusCode::UNAUTHORIZED,
+            ApiError::Query(_)
+            | ApiError::Validation(_)
+            | ApiError::Path(_)
+            | ApiError::Json(_)
+            | ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            ApiError::Unauthorized(_) | ApiError::Jwt(_) => StatusCode::UNAUTHORIZED,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
-            ApiError::InternalServerError(_) |
-            ApiError::DatabaseError(_) => StatusCode::INTERNAL_SERVER_ERROR
+            ApiError::InternalServerError(_) | ApiError::DatabaseError(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         }
     }
 }

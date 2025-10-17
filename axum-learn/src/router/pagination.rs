@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::util::deserialize_number;

@@ -1,6 +1,6 @@
 mod db;
-mod log;
 mod jwt;
+mod log;
 mod server;
 
 use std::sync::LazyLock;
@@ -10,8 +10,8 @@ use config::{Config, FileFormat};
 use serde::Deserialize;
 
 use db::DbConfig;
-use log::LogConfig;
 use jwt::JwtConfig;
+use log::LogConfig;
 pub use server::ServerConfig;
 
 pub static CONFIG: LazyLock<AppConfig> =
